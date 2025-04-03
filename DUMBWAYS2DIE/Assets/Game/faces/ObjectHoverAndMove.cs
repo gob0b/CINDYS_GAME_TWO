@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -5,11 +6,13 @@ public class ObjectHoverAndMove : MonoBehaviour
 {
     private Vector3 originalPosition;
     private Vector3 originalScale;
+    private Quaternion originalRotation;
     private bool isClicked = false;
 
-    public float hoverScaleFactor = 1.1f; // Scale increase on hover
-    public float moveSpeed = 5f; // Speed of movement
-    public Vector3 targetOffset = new Vector3(0, 0, 2f); // Offset from the camera
+    public float hoverScaleFactor = 1.1f;
+    public float moveSpeed = 5f;
+    public float rotateSpeed = 5f;
+    public Transform waypoint; // Assign a GameObject in Unity as the waypoint
 
     private Camera mainCamera;
 
@@ -17,6 +20,7 @@ public class ObjectHoverAndMove : MonoBehaviour
     {
         originalPosition = transform.position;
         originalScale = transform.localScale;
+        originalRotation = transform.rotation;
         mainCamera = Camera.main;
     }
 
@@ -34,11 +38,10 @@ public class ObjectHoverAndMove : MonoBehaviour
 
     void OnMouseDown()
     {
-        if (!isClicked)
+        if (!isClicked && waypoint != null)
         {
             isClicked = true;
-            Vector3 targetPosition = mainCamera.transform.position + mainCamera.transform.forward * targetOffset.z;
-            StartCoroutine(MoveToPosition(targetPosition));
+            StartCoroutine(MoveAndRotateToPosition(waypoint.position, waypoint.rotation, originalScale));
         }
     }
 
@@ -47,19 +50,23 @@ public class ObjectHoverAndMove : MonoBehaviour
         if (isClicked && Input.GetMouseButtonDown(0) && !IsMouseOverUI() && !IsMouseOverObject())
         {
             isClicked = false;
-            StartCoroutine(MoveToPosition(originalPosition));
+            StartCoroutine(MoveAndRotateToPosition(originalPosition, originalRotation, originalScale));
         }
     }
 
-    private System.Collections.IEnumerator MoveToPosition(Vector3 target)
+    private IEnumerator MoveAndRotateToPosition(Vector3 targetPos, Quaternion targetRot, Vector3 targetScale)
     {
         float time = 0;
         Vector3 startPosition = transform.position;
+        Quaternion startRotation = transform.rotation;
+        Vector3 startScale = transform.localScale;
 
         while (time < 1)
         {
             time += Time.deltaTime * moveSpeed;
-            transform.position = Vector3.Lerp(startPosition, target, time);
+            transform.position = Vector3.Lerp(startPosition, targetPos, time);
+            transform.rotation = Quaternion.Slerp(startRotation, targetRot, time * rotateSpeed);
+            transform.localScale = Vector3.Lerp(startScale, targetScale, time);
             yield return null;
         }
     }
@@ -75,3 +82,4 @@ public class ObjectHoverAndMove : MonoBehaviour
         return Physics.Raycast(ray, out RaycastHit hit) && hit.transform == transform;
     }
 }
+

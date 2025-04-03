@@ -4,12 +4,12 @@ public class ButtonAnimator : MonoBehaviour
 {
     public Animator buttonPressAnimator; // Animator component for the button
 
-    // Method to trigger the "ButtonPress" animation
+    // Method to trigger the "Button Pressed" animation
     public void Buttonin()
     {
         if (buttonPressAnimator != null)
         {
-            buttonPressAnimator.SetTrigger("ButtonPress"); // Triggers the animation on the button
+            buttonPressAnimator.SetTrigger("Button Pressed"); // Triggers the first animation
         }
     }
 }

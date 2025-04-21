@@ -14,6 +14,11 @@ public class ObjectHoverAndMove : MonoBehaviour
     public float rotateSpeed = 5f;
     public Transform waypoint; // Assign a GameObject in Unity as the waypoint
 
+    public AudioSource pressAudioSource;
+    public AudioSource returnAudioSource;
+    public AudioClip pressAudio;
+    public AudioClip returnAudio;
+
     private Camera mainCamera;
 
     void Start()
@@ -41,6 +46,8 @@ public class ObjectHoverAndMove : MonoBehaviour
         if (!isClicked && waypoint != null)
         {
             isClicked = true;
+            if (pressAudioSource != null && pressAudio != null)
+                pressAudioSource.PlayOneShot(pressAudio);
             StartCoroutine(MoveAndRotateToPosition(waypoint.position, waypoint.rotation, originalScale));
         }
     }
@@ -50,6 +57,8 @@ public class ObjectHoverAndMove : MonoBehaviour
         if (isClicked && Input.GetMouseButtonDown(0) && !IsMouseOverUI() && !IsMouseOverObject())
         {
             isClicked = false;
+            if (returnAudioSource != null && returnAudio != null)
+                returnAudioSource.PlayOneShot(returnAudio);
             StartCoroutine(MoveAndRotateToPosition(originalPosition, originalRotation, originalScale));
         }
     }
@@ -82,4 +91,3 @@ public class ObjectHoverAndMove : MonoBehaviour
         return Physics.Raycast(ray, out RaycastHit hit) && hit.transform == transform;
     }
 }
-

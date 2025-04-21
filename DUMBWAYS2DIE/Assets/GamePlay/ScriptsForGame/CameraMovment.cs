@@ -1,79 +1,166 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 
 public class CameraMovement : MonoBehaviour
 {
-    public float moveSpeed = 5f; // Speed of movement
-    public float rotationSpeed = 30f; // Speed of rotation
-    public float startDelay = 2f; // Delay before movement starts
-    public float lockViewDelay = 1f; // Delay before locking view
+    public Transform targetObject; // The GameObject to look at after camera finishes looking down.
+    public List<Transform> waypoints; // List of waypoints the camera will move to.
+    public float startDelay = 2f; // Delay before the camera starts looking down.
+    public float lookDownDuration = 2f; // Duration for looking down.
+    public float lookUpSpeed = 1f; // Speed of looking up.
+    public float moveSpeed = 5f; // Speed of moving between waypoints.
+    public AudioClip waypointAudio; // Audio to play when moving between waypoints.
+    public AudioClip lookDownAudio; // Audio to play when looking down.
+    private AudioSource audioSource;
 
-    public float moveDistanceX = 10f; // Distance to move right
-    public float moveDistanceZ = 10f; // Distance to move forward (first instance)
-    public float moveDistanceZ2 = 15f; // Different distance to move forward (second instance)
-    public float moveDistanceLeft = 10f; // Distance to move left
-    public float moveDistanceDown = 10f; // Distance to move down
+    private bool isLookingDown = true;
+    private bool isLookingUp = false;
+    private bool isMovingToWaypoints = false;
+    private int currentWaypointIndex = 0;
+    private bool isBobbing = true; // Camera bobbing always on by default
 
-    public Transform targetObject; // Object to keep in view
+    private Vector3 initialPosition;
+    private Vector3 originalPosition;
 
-    private Vector3 startPosition;
-    private Quaternion startRotation;
-    private bool lockView = false;
+    // Public variables to adjust camera bobbing speed and amount
+    [Header("Camera Bobbing Settings")]
+    public float bobbingSpeed = 10f; // Speed of bobbing (adjustable in the Inspector)
+    public float bobbingAmount = 0.05f; // Amount of bobbing (adjustable in the Inspector)
 
-    private void Start()
+    // Public variable to adjust the amount of camera look down
+    [Header("Camera Look Down Settings")]
+    public float lookDownAngle = -60f; // Angle to look down (adjustable in the Inspector)
+    public float lookDownSpeed = 1f; // Speed of looking down (adjustable in the Inspector)
+
+    void Start()
     {
-        startPosition = transform.position;
-        startRotation = transform.rotation;
-        StartCoroutine(StartSequence());
+        audioSource = GetComponent<AudioSource>();
+        initialPosition = transform.position;
+        originalPosition = transform.position;
+        StartCoroutine(StartDelayAndLookDownUp());
     }
 
-    public void SetTarget(Transform newTarget)
+    void Update()
     {
-        targetObject = newTarget;
-    }
-
-    private IEnumerator StartSequence()
-    {
-        yield return new WaitForSeconds(startDelay);
-
-        Vector3 targetPositionX = startPosition + new Vector3(moveDistanceX, 0, 0);
-        yield return MoveToPosition(targetPositionX);
-
-        Vector3 targetPositionZ = targetPositionX + new Vector3(0, 0, moveDistanceZ);
-        yield return MoveToPosition(targetPositionZ);
-
-        Vector3 targetPositionLeft = targetPositionZ + new Vector3(-moveDistanceLeft, 0, 0);
-        yield return MoveToPosition(targetPositionLeft);
-
-        Vector3 targetPositionZ2 = targetPositionLeft + new Vector3(0, 0, moveDistanceZ2);
-        yield return MoveToPosition(targetPositionZ2);
-
-        Vector3 targetPositionDown = targetPositionZ2 + new Vector3(0, -moveDistanceDown, 0);
-        yield return MoveToPosition(targetPositionDown);
-
-        yield return new WaitForSeconds(lockViewDelay);
-        lockView = true;
-    }
-
-    private IEnumerator MoveToPosition(Vector3 targetPosition)
-    {
-        while (Vector3.Distance(transform.position, targetPosition) > 0.1f)
+        if (isLookingUp && !isMovingToWaypoints)
         {
-            transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
-            if (lockView && targetObject != null)
-            {
-                transform.LookAt(targetObject);
-            }
-            yield return null;
+            LookUp();
+        }
+
+        if (isMovingToWaypoints)
+        {
+            MoveToWaypoints();
+        }
+
+        if (isBobbing)
+        {
+            ApplyCameraBobbing();
         }
     }
 
-    private void Update()
+    private IEnumerator StartDelayAndLookDownUp()
     {
-        if (lockView && targetObject != null)
+        // Wait for the start delay
+        yield return new WaitForSeconds(startDelay);
+
+        // Start looking down to the desired angle
+        Quaternion targetRotation = Quaternion.Euler(lookDownAngle, transform.eulerAngles.y, transform.eulerAngles.z);
+        while (isLookingDown && Quaternion.Angle(transform.rotation, targetRotation) > 0.1f)
+        {
+            // Smoothly transition to the look-down angle, using lookDownSpeed
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * lookDownSpeed);
+            yield return null;
+        }
+
+        // Play the "looking down" audio when the camera starts looking down
+        if (lookDownAudio != null && !audioSource.isPlaying)
+        {
+            audioSource.PlayOneShot(lookDownAudio);
+        }
+
+        // Wait for the specified duration while looking down
+        yield return new WaitForSeconds(lookDownDuration);
+
+        // Stop the "looking down" audio when the camera looks up
+        if (audioSource.isPlaying && lookDownAudio != null)
+        {
+            audioSource.Stop();
+        }
+
+        // Start looking up
+        isLookingDown = false;
+        isLookingUp = true;
+    }
+
+    private void LookUp()
+    {
+        Quaternion targetRotation = Quaternion.Euler(0f, transform.eulerAngles.y, transform.eulerAngles.z);
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * lookUpSpeed);
+
+        if (Quaternion.Angle(transform.rotation, targetRotation) < 0.1f)
+        {
+            isLookingUp = false;
+            LockOnToTarget();
+        }
+    }
+
+    private void LockOnToTarget()
+    {
+        if (targetObject != null)
+        {
+            // Start following the target and moving to waypoints
+            isMovingToWaypoints = true;
+        }
+    }
+
+    private void MoveToWaypoints()
+    {
+        if (currentWaypointIndex < waypoints.Count)
+        {
+            // Move the camera to the current waypoint
+            Vector3 targetPosition = waypoints[currentWaypointIndex].position;
+            transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
+
+            // Play the waypoint audio when the camera starts moving to the next waypoint
+            if (audioSource != null && waypointAudio != null && Vector3.Distance(transform.position, targetPosition) < 0.1f)
+            {
+                audioSource.PlayOneShot(waypointAudio);
+            }
+
+            if (Vector3.Distance(transform.position, targetPosition) < 0.1f)
+            {
+                currentWaypointIndex++;
+            }
+        }
+        else
+        {
+            // Once the camera reaches the last waypoint, stop the audio
+            if (audioSource.isPlaying)
+            {
+                audioSource.Stop();
+            }
+
+            isMovingToWaypoints = false;
+        }
+
+        // Always look at the target object
+        if (targetObject != null)
         {
             transform.LookAt(targetObject);
         }
     }
+
+    private void ApplyCameraBobbing()
+    {
+        // Apply bobbing only when moving
+        if (isMovingToWaypoints)
+        {
+            float time = Time.time * bobbingSpeed;
+            float bobbingYOffset = Mathf.Sin(time) * bobbingAmount;
+            transform.position = new Vector3(transform.position.x, originalPosition.y + bobbingYOffset, transform.position.z);
+        }
+    }
 }
+
 

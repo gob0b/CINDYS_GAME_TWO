@@ -5,59 +5,63 @@ using UnityEngine.UI;
 public class InteractionSystem : MonoBehaviour
 {
     [Header("General Settings")]
-    public GameObject[] panels;          // Panels to cycle through
-    public float transitionDuration = 1f; // Duration for panel transitions
-    public ButtonAnimator[] buttonAnimators; // Button animations for button press
-    public AudioSource audioSource;      // Audio source for button press sound
-    public GameObject canvas;            // Canvas to show/hide
-    public Light sceneLight;             // Light to control visibility
-    public GameObject objectToAnimate;   // GameObject to animate
-    public string animationTrigger = "PlayAnimation"; // Animation trigger name
+    public GameObject[] panels;
+    public float transitionDuration = 1f;
+    public ButtonAnimator[] buttonAnimators;
+    public GameObject canvas;
+    public Light sceneLight;
+    public Light panelLight;
+    public GameObject objectToAnimate;
+    public string animationTrigger = "PlayAnimation";
 
-    [Header("Static Image Effect")]
-    public Image staticImage;            // Image to apply static effect
-    public Material staticMaterial;      // Material with static shader
-    public float staticTransitionDuration = 0.5f; // Duration of the static effect
+    [Header("Static Effect Settings")]
+    public Image staticImage;
+    public Material staticMaterial;
+    public float staticFadeInDuration = 0.5f;  // Adjustable fade-in duration
+    public float staticFadeOutDuration = 0.5f; // Adjustable fade-out duration
+    public float staticVisibleDuration = 0.5f; // Adjustable duration for how long static image is visible
+    public AudioClip staticAudioClip; // Audio clip for the static effect
 
-    [Header("Image Sequence Settings")]
-    public GameObject imageSequencePanel;  // Panel to display image sequence
-    public Sprite[] imageSequence;         // Array of images for the sequence
-    public float imageDisplayTime = 3f;    // Time each image stays visible (adjustable)
-    public float fadeDuration = 0.5f;     // Duration of fade transition between images
-    private int currentImageIndex = 0;     // Tracks the current image in the sequence
+    [Header("Audio Settings")]
+    public AudioClip buttonPressAudioClip; // AudioClip for button press
+    public AudioClip lightOnAudioClip;     // AudioClip for light turning on
+    public AudioClip lightOffAudioClip;    // AudioClip for light turning off
+    public AudioClip pressEAudioClip;      // AudioClip for pressing E
 
-    [Header("Overlay Filter")]
-    public Image overlayImage;           // Image to serve as overlay filter
+    [Header("Emission Settings")]
+    public Renderer emissionRenderer;
+    public Color emissionOnColor = Color.white;
+    public Color emissionOffColor = Color.black;
 
-    private int currentPanelIndex = 0;     // Index of the current panel
-    private bool hasPressedE = false;      // Prevents multiple presses of E
+    [Header("Panel Light & Emission Trigger")]
+    public int triggerPanelIndex = 0; // Index of the panel that triggers the light and emission
+    public float flickerIntensityRange = 0.2f; // Range for flickering intensity (0 to 1)
+    public float flickerSpeed = 0.1f; // Speed of the flicker effect
+
+    private int currentPanelIndex = 0;
+    private bool hasPressedE = false;
+
+    private AudioSource audioSource;
 
     void Start()
     {
-        // Initialize panels and set the first panel active
+        // Set initial state for canvas, lights, and emission
+        canvas.SetActive(false);  // Canvas is hidden initially
+        sceneLight.enabled = false; // Scene light is off initially
+        panelLight.enabled = false; // Panel light is off initially
+        SetEmission(false); // Emission is off initially
+
+        // Ensure only the first panel is visible at the start
         InitializePanels();
 
-        // Initialize the static image effect
-        InitializeStaticImage();
-
-        // Hide the canvas and set initial conditions
-        canvas.SetActive(false);
-        sceneLight.enabled = false;
-        imageSequencePanel.SetActive(false); // Hide image sequence panel initially
-
-        // Ensure overlay image is active and is on top of everything else
-        if (overlayImage != null)
+        // Set static image invisible at start
+        if (staticImage != null)
         {
-            overlayImage.gameObject.SetActive(true);
-            overlayImage.rectTransform.SetAsLastSibling(); // Make sure it overlays everything
+            staticImage.enabled = false;
         }
 
-        // Ensure overlay image is part of the canvas and set its sorting order to a higher value
-        Canvas canvasComponent = overlayImage.GetComponentInParent<Canvas>();
-        if (canvasComponent != null)
-        {
-            canvasComponent.sortingOrder = 10; // Set sorting order to make sure it renders on top
-        }
+        // Create an AudioSource for handling the sound effects
+        audioSource = gameObject.AddComponent<AudioSource>();
     }
 
     void Update()
@@ -67,122 +71,135 @@ public class InteractionSystem : MonoBehaviour
 
     private void HandleInput()
     {
-        // Trigger button animations on pressing Space
+        // Press Space to trigger button animation and panel cycling
         if (Input.GetKeyDown(KeyCode.Space))
         {
+            // Play the static effect
+            StartCoroutine(PlayStaticTransition());
+
             PlayButtonAnimation();
+            StartCoroutine(CyclePanels());
         }
 
-        // Toggle canvas and light on pressing E
+        // Press E to toggle canvas, light, and emission
         if (Input.GetKeyDown(KeyCode.E) && !hasPressedE)
         {
             ToggleCanvasAndLight();
             PlayObjectAnimation();
             hasPressedE = true;
-        }
-
-        // If image sequence panel is active, start cycling through images
-        if (imageSequencePanel.activeSelf)
-        {
-            StartCoroutine(SwitchImageSequence());
+            PlayAudioClip(pressEAudioClip);  // Play the E press sound
         }
     }
 
     private void InitializePanels()
     {
-        // Set only the first panel active and others inactive
+        // Hide all panels initially, and show only the first one
         for (int i = 0; i < panels.Length; i++)
         {
-            panels[i].SetActive(i == 0);
-            SetPanelInteractable(panels[i], i == 0);
+            panels[i].SetActive(false); // Hide all panels
         }
-    }
-
-    private void InitializeStaticImage()
-    {
-        // Set up the static image effect (if any)
-        if (staticImage != null && staticMaterial != null)
-        {
-            staticImage.material = staticMaterial;
-            staticImage.enabled = false; // Initially hidden
-        }
+        panels[0].SetActive(true); // Show the first panel
     }
 
     private void PlayButtonAnimation()
     {
-        // Play the animation for the current button
         if (buttonAnimators.Length > currentPanelIndex && buttonAnimators[currentPanelIndex] != null)
         {
             buttonAnimators[currentPanelIndex].Buttonin();
         }
-
-        // Play sound if any assigned
-        if (audioSource != null)
-        {
-            audioSource.Play();
-        }
-
-        // Transition panels
-        StartCoroutine(CyclePanels());
+        PlayAudioClip(buttonPressAudioClip); // Play the button press sound
     }
 
     private IEnumerator CyclePanels()
     {
-        // Fade in static image effect before panel switch
+        // Make sure the static image is visible during transition
         if (staticImage != null)
         {
             staticImage.enabled = true;
-            yield return FadeImage(staticImage, 0f, 1f, staticTransitionDuration);
+            yield return FadeImage(staticImage, 0f, 1f, staticFadeInDuration); // Use adjustable fade-in duration
         }
 
-        // Fade out the current panel and deactivate it
-        if (panels.Length > 0)
-        {
-            yield return FadePanel(panels[currentPanelIndex], 1f, 0f, transitionDuration);
-            SetPanelInteractable(panels[currentPanelIndex], false);
-            panels[currentPanelIndex].SetActive(false);
-        }
+        panels[currentPanelIndex].SetActive(false);
 
-        // Wait a short time before switching to the next panel
-        yield return new WaitForSeconds(transitionDuration * 0.1f);
-
-        // Move to the next panel
+        // Cycle to the next panel
         currentPanelIndex = (currentPanelIndex + 1) % panels.Length;
+        panels[currentPanelIndex].SetActive(true);
 
-        // Activate the next panel and fade it in
-        if (panels.Length > 0)
-        {
-            panels[currentPanelIndex].SetActive(true);
-            SetPanelInteractable(panels[currentPanelIndex], true);
-            yield return FadePanel(panels[currentPanelIndex], 0f, 1f, transitionDuration);
-        }
+        // Handle light and emission when switching to the new panel
+        HandleLightAndEmission();
 
-        // Fade out the static image effect
+        // Fade out the static image after transitioning to the new panel
         if (staticImage != null)
         {
-            yield return FadeImage(staticImage, 1f, 0f, staticTransitionDuration);
+            yield return new WaitForSeconds(staticVisibleDuration); // Wait for the adjustable visible duration
+            yield return FadeImage(staticImage, 1f, 0f, staticFadeOutDuration); // Use adjustable fade-out duration
             staticImage.enabled = false;
         }
     }
 
-    private IEnumerator SwitchImageSequence()
+    private void HandleLightAndEmission()
     {
-        if (imageSequence.Length == 0) yield break;
+        bool isTriggerPanel = currentPanelIndex == triggerPanelIndex;
 
-        Image imageComponent = imageSequencePanel.GetComponent<Image>();
+        // Handle turning off light and emission before switching panels
+        if (panelLight.enabled)
+        {
+            // Check if the lightOnAudio is playing and stop it if it is
+            if (audioSource.isPlaying)
+            {
+                audioSource.Stop(); // Stop the "on" audio
+                PlayAudioClip(lightOffAudioClip); // Play the "off" audio
+            }
+        }
 
-        // Fade out current image and wait
-        yield return FadeImage(imageComponent, 1f, 0f, fadeDuration); // Fade out the image before switching
+        // Enable panel light and emission for the triggered panel
+        panelLight.enabled = isTriggerPanel;
+        SetEmission(isTriggerPanel);
 
-        // Show current image
-        imageComponent.sprite = imageSequence[currentImageIndex];
-        yield return FadeImage(imageComponent, 0f, 1f, fadeDuration); // Fade in the new image
+        // Play the "on" audio if the panel is the trigger panel
+        if (isTriggerPanel)
+        {
+            PlayAudioClip(lightOnAudioClip); // Play the "on" audio
+        }
+    }
 
-        // Wait for the specified duration before switching
-        yield return new WaitForSeconds(imageDisplayTime);
+    private void SetEmission(bool isOn)
+    {
+        if (emissionRenderer != null)
+        {
+            Material mat = emissionRenderer.material;
+            mat.SetColor("_EmissionColor", isOn ? emissionOnColor : emissionOffColor);
+            if (isOn)
+            {
+                mat.EnableKeyword("_EMISSION");
+            }
+            else
+            {
+                mat.DisableKeyword("_EMISSION");
+            }
+        }
+    }
 
-        // Move to the next image (loop back to the start if necessary)
-        currentImageIndex = (currentImageIndex + 1) % imageSequence.Length;
+    private IEnumerator FlickerLight()
+    {
+        float time = 0f;
+        while (panelLight.enabled)
+        {
+            // Create random flicker intensity
+            float flickerIntensity = 1f - Random.Range(0f, flickerIntensityRange);
+            panelLight.intensity = flickerIntensity;
+
+            // Wait for a short time before changing intensity again
+            time += Time.deltaTime;
+            if (time >= flickerSpeed)
+            {
+                time = 0f;
+            }
+            yield return null;
+        }
+
+        // Ensure the light returns to normal intensity when flickering stops
+        panelLight.intensity = 1f;
     }
 
     private IEnumerator FadeImage(Image img, float startAlpha, float endAlpha, float duration)
@@ -202,67 +219,72 @@ public class InteractionSystem : MonoBehaviour
             yield return null;
         }
 
-        img.color = endColor; // Ensure final alpha is set
-    }
-
-    private IEnumerator FadePanel(GameObject panel, float startAlpha, float endAlpha, float duration)
-    {
-        CanvasGroup canvasGroup = panel.GetComponent<CanvasGroup>();
-        if (canvasGroup == null)
-        {
-            canvasGroup = panel.AddComponent<CanvasGroup>();
-        }
-
-        canvasGroup.alpha = startAlpha;
-        float timeElapsed = 0f;
-
-        while (timeElapsed < duration)
-        {
-            canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, timeElapsed / duration);
-            timeElapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        canvasGroup.alpha = endAlpha; // Ensure final alpha is set
-    }
-
-    private void SetPanelInteractable(GameObject panel, bool interactable)
-    {
-        CanvasGroup canvasGroup = panel.GetComponent<CanvasGroup>();
-        if (canvasGroup == null)
-        {
-            canvasGroup = panel.AddComponent<CanvasGroup>();
-        }
-
-        canvasGroup.interactable = interactable;
-        canvasGroup.blocksRaycasts = interactable;
+        img.color = endColor;
     }
 
     private void ToggleCanvasAndLight()
     {
-        // Toggle canvas visibility
-        canvas.SetActive(true);
+        // Toggle canvas visibility and turn on the light and emission
+        canvas.SetActive(true);  // Show the canvas
+        sceneLight.enabled = true;  // Turn on the scene light
+        panelLight.enabled = true;  // Turn on the panel light
+        SetEmission(true);  // Turn on the emission
 
-        // Turn the light on if it's assigned
-        if (sceneLight != null)
-        {
-            sceneLight.enabled = true;
-        }
+        // Ensure only the first panel is visible when the canvas is toggled on
+        InitializePanels();
+
+        // Play the light on audio when E is pressed
+        PlayAudioClip(lightOnAudioClip); // Play the light "on" sound
     }
 
     private void PlayObjectAnimation()
     {
-        // Trigger the animation on a specified object
         if (objectToAnimate != null)
         {
             Animator animator = objectToAnimate.GetComponent<Animator>();
-            if (animator != null)
+            animator?.SetTrigger(animationTrigger);
+        }
+    }
+
+    private IEnumerator PlayStaticTransition()
+    {
+        // Show the static image when Space is pressed
+        if (staticImage != null)
+        {
+            staticImage.enabled = true;
+
+            // Play static effect audio
+            if (staticAudioClip != null)
             {
-                animator.SetTrigger(animationTrigger);
+                audioSource.PlayOneShot(staticAudioClip);
             }
+
+            yield return FadeImage(staticImage, 0f, 1f, staticFadeInDuration);  // Fade in static effect
+            yield return new WaitForSeconds(staticVisibleDuration); // Wait for the adjustable visible duration
+            yield return FadeImage(staticImage, 1f, 0f, staticFadeOutDuration);  // Fade out static effect
+            staticImage.enabled = false;
+
+            // Stop static audio after the static image is hidden
+            audioSource.Stop();
+        }
+    }
+
+    private void PlayAudioClip(AudioClip clip)
+    {
+        if (clip != null)
+        {
+            audioSource.PlayOneShot(clip); // Play the audio clip
         }
     }
 }
+
+
+
+
+
+
+
+
 
 
 

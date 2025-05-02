@@ -6410,11 +6410,11 @@ PrefabInstance:
       objectReference: {fileID: 8400000, guid: 3c1e59b03ca5c27468da7a289726e500, type: 2}
     - target: {fileID: 2802422119666379292, guid: 6eeb6191dd1ce3c45958077e5fa924ce, type: 3}
       propertyPath: 'm_DirectAudioMutes.Array.data[0]'
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2802422119666379292, guid: 6eeb6191dd1ce3c45958077e5fa924ce, type: 3}
       propertyPath: 'm_DirectAudioVolumes.Array.data[0]'
-      value: 0.908
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4064339649238514556, guid: 6eeb6191dd1ce3c45958077e5fa924ce, type: 3}
       propertyPath: m_Pivot.x
